@@ -323,6 +323,13 @@ def show_home():
 def process_queries_with_live_updates(df_process, query_column, total_queries, progress_container, status_container):
     """Process queries with real-time progress updates"""
 
+    if df_process is None:
+        st.error("Error: The input DataFrame is empty or not provided.")
+        return
+    if query_column is None:
+        st.error("Error: The query column name is not provided.")
+        return
+
     # Import here to avoid circular imports
     from hr_classifier_py import summarise_hr_query, classify_hr_topic, classify_system_process_policy
 

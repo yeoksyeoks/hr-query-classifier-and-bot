@@ -322,41 +322,12 @@ def show_home():
 
 def show_batch_classifier():
     st.title("Batch HR Query Classifier")
-    
-    # ---------------------------------------------
-    # --- IMPORTANT: INITIALIZE SESSION STATE ---
-    # ---------------------------------------------
-    if 'processing_state' not in st.session_state:
-        st.session_state['processing_state'] = 'ready'
-    if 'processed_data' not in st.session_state:
-        st.session_state['processed_data'] = None
-    if 'processing_completed' not in st.session_state:
-        st.session_state['processing_completed'] = False
-    
-    # The 'retry_requested' flag is no longer needed with the new logic
-
-    if not CLASSIFIER_AVAILABLE:
-        st.error("**Classifier Module Unavailable**: There was an error loading the classification module.")
-        st.info("This could be due to:")
-        st.write("- Missing dependencies")
-        st.write("- API configuration issues")
-        st.write("- Import errors")
-        
-        return
-    
     st.markdown("Upload and process multiple HR queries for automated categorisation and summarisation.")
 
     # Check API key first
     if not os.getenv('OPENAI_API_KEY'):
         st.error("**API Key Required**: Please configure your OpenAI API key in the sidebar before processing queries.")
         st.info("**Tip**: Look for the 'Configure API Key' section in the left sidebar.")
-        return
-
-    # Import functions locally for this function
-    try:
-        from hr_classifier_py import summarise_hr_query, classify_hr_topic, classify_system_process_policy, get_processing_summary, process_queries_with_live_updates
-    except ImportError as e:
-        st.error(f"Error importing classifier functions: {e}")
         return
 
     # File upload section
@@ -398,105 +369,110 @@ def show_batch_classifier():
                     help="Limit processing to avoid high API costs"
                 )
 
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-            return
-        
-        st.markdown("### Process Queries")
-        
-        # Create placeholders for live updates
-        progress_container = st.empty()
-        status_container = st.empty()
+            st.markdown("### Process Queries")
 
-        # Create placeholder for main action button
-        button_placeholder = st.empty()
+            # Initialise processing state
+            if 'processing_state' not in st.session_state:
+                st.session_state['processing_state'] = 'ready'
 
-        if st.session_state['processing_state'] == 'ready':
-            if button_placeholder.button("Start Processing", type="secondary", use_container_width=True):
-                if not os.getenv('OPENAI_API_KEY'):
-                    st.error("OpenAI API key not found. Please configure your API key in the sidebar.")
-                    return
-                
-                st.session_state['processing_state'] = 'processing'
-                st.session_state['total_queries_to_process'] = max_queries
-                st.rerun()
-
-        elif st.session_state['processing_state'] == 'processing':
-            button_placeholder.info("Processing in progress... Please wait.")
-
-            if not st.session_state['processing_completed']:
-                try:
-                    result_df = process_queries_with_live_updates(
-                        df.head(st.session_state['total_queries_to_process']),
-                        query_column,
-                        st.session_state['total_queries_to_process'],
-                        progress_container,
-                        status_container
-                    )
-                    st.session_state['processed_data'] = result_df
-                    st.session_state['processing_state'] = 'complete'
-                    
-                    summary = get_processing_summary(result_df)
-                    st.session_state['last_processing_stats'] = summary
-                    if 'activity_log' not in st.session_state:
-                        st.session_state['activity_log'] = []
-                    st.session_state['activity_log'].append(
-                        f"{datetime.now().strftime('%H:%M')} - Processed {len(result_df)} queries"
-                    )
-                except Exception as e:
-                    st.session_state['processing_state'] = 'error'
-                    st.error(f"Processing error: {str(e)}")
-                finally:
-                    st.session_state['processing_completed'] = True
-                    st.rerun()
-
-        elif st.session_state['processing_state'] == 'complete':
-            button_placeholder.success("Processing Complete! View results below.")
+            # Create placeholders for live updates
+            progress_container = st.empty()
+            status_container = st.empty()
             
-            col_go, col_reset = st.columns(2)
-            with col_go:
-                if st.button("Go to RAG Chatbot", type="primary", use_container_width=True):
-                    st.session_state['current_page'] = "RAG Chatbot"
-                    st.rerun()
-            with col_reset:
-                if st.button("Process Another Batch", use_container_width=True):
+            # Create placeholder for main action button
+            button_placeholder = st.empty()
+
+            # Logic to render correct button and handle state transitions
+            if st.session_state['processing_state'] == 'ready':
+                if button_placeholder.button("Start Processing", type="secondary", use_container_width=True):
+                    if not os.getenv('OPENAI_API_KEY'):
+                        st.error("OpenAI API key not found. Please configure your API key in the sidebar.")
+                        return # Exit the function if API key is missing
+                    
+                    st.session_state['processing_state'] = 'processing'
+                    st.session_state['total_queries_to_process'] = max_queries
+                    st.rerun() # Rerun to show "Processing..." state
+
+            elif st.session_state['processing_state'] == 'processing':
+                button_placeholder.info("Processing in progress... Please wait.")
+
+                # This block runs after 'Start Processing' button is clicked
+                if 'processing_completed' not in st.session_state:
+                    try:
+                        result_df = process_queries_with_live_updates(
+                            df.head(st.session_state['total_queries_to_process']),
+                            query_column,
+                            st.session_state['total_queries_to_process'],
+                            progress_container,
+                            status_container
+                        )
+                        st.session_state['processed_data'] = result_df
+                        st.session_state['processing_state'] = 'complete'
+                        
+                        summary = get_processing_summary(result_df)
+                        st.session_state['last_processing_stats'] = summary
+                        if 'activity_log' not in st.session_state:
+                            st.session_state['activity_log'] = []
+                        st.session_state['activity_log'].append(
+                            f"{datetime.now().strftime('%H:%M')} - Processed {len(result_df)} queries"
+                        )
+                    except Exception as e:
+                        st.session_state['processing_state'] = 'error'
+                        st.error(f"Processing error: {str(e)}")
+                    finally:
+                        st.session_state['processing_completed'] = True
+                        st.rerun() # Rerun to show final results
+
+            elif st.session_state['processing_state'] == 'complete':
+                button_placeholder.success("Processing Complete! View results below.")
+                
+                col_go, col_reset = st.columns(2)
+                with col_go:
+                    if st.button("Go to RAG Chatbot", type="primary", use_container_width=True):
+                        st.session_state['current_page'] = "RAG Chatbot"
+                        st.rerun()
+                with col_reset:
+                    if st.button("Process Another Batch", use_container_width=True):
+                        del st.session_state['processed_data']
+                        del st.session_state['processing_completed']
+                        st.session_state['processing_state'] = 'ready'
+                        st.rerun()
+            
+            elif st.session_state['processing_state'] == 'error':
+                button_placeholder.error("Processing Error! Retry below.")
+                if st.button("Retry Processing", use_container_width=True):
                     del st.session_state['processed_data']
-                    del st.session_state['processing_completed']
+                    if 'processing_completed' in st.session_state:
+                        del st.session_state['processing_completed']
                     st.session_state['processing_state'] = 'ready'
                     st.rerun()
-                    
-        elif st.session_state['processing_state'] == 'error':
-            button_placeholder.error("Processing Error! Retry below.")
-            if st.button("Retry Processing", use_container_width=True, key="retry_button"):
-                # Simplified and more direct state reset
-                del st.session_state['processed_data']
-                del st.session_state['processing_completed']
-                st.session_state['processing_state'] = 'ready'
-                st.rerun()
 
-        if st.session_state['processed_data'] is not None and st.session_state['processing_state'] in ['complete', 'error']:
-            st.markdown("### Processing Results")
-            result_df = st.session_state['processed_data']
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Processed", len(result_df))
-            with col2:
-                success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
-                st.metric("Successful", success_count)
-            with col3:
-                success_rate = (success_count / len(result_df)) * 100 if len(result_df) > 0 else 0
-                st.metric("Success Rate", f"{success_rate:.1f}%")
+            # Show results if processing is complete
+            if 'processed_data' in st.session_state and st.session_state['processing_state'] in ['complete', 'error']:
+                st.markdown("### Processing Results")
+                result_df = st.session_state['processed_data']
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Processed", len(result_df))
+                with col2:
+                    success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
+                    st.metric("Successful", success_count)
+                with col3:
+                    success_rate = (success_count / len(result_df)) * 100 if len(result_df) > 0 else 0
+                    st.metric("Success Rate", f"{success_rate:.1f}%")
 
-            st.dataframe(result_df, use_container_width=True)
+                st.dataframe(result_df, use_container_width=True)
 
-            csv = result_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download Results CSV",
-                data=csv,
-                file_name=f"hr_query_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+                csv = result_df.to_csv(index=False)
+                st.download_button(
+                    label="Download Results CSV",
+                    data=csv,
+                    file_name=f"hr_query_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        except Exception as e:
+            st.error(f"Error reading file: {str(e)}")
 
 def show_rag_chatbot():
     st.title("RAG-Powered HR Chatbot")

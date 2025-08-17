@@ -569,13 +569,6 @@ def show_batch_classifier():
         st.info("**Tip**: Look for the 'Configure API Key' section in the left sidebar.")
         return
 
-    # Import functions locally for this function
-    try:
-        from hr_classifier_py import process_hr_queries, get_processing_summary
-    except ImportError as e:
-        st.error(f"Error importing classifier functions: {e}")
-        return
-
     # File upload section
     st.markdown("### Upload Data")
     uploaded_file = st.file_uploader(
@@ -645,83 +638,34 @@ def show_batch_classifier():
                 # This block runs after 'Start Processing' button is clicked
                 if 'processing_completed' not in st.session_state:
                     try:
-                        # Get the subset of data to process
-                        df_to_process = df.head(st.session_state['total_queries_to_process'])
-                        
-                        # Topic categories (same as in your original code)
-                        topic_categories = [
-                            'Annual Variable Component and CONNECT Plan', 'Recruitment', 'Posting',
-                            'Other HR Matters', 'Medical Leave', 'Performance Appraisal',
-                            'Professional Development', 'Casual Employment Scheme',
-                            'Pro-Family Full Pay Leave', 'Medical and Dental Benefits',
-                            'Leaving Service', 'No-Pay Leave', 'Awards',
-                            'Letter of Employment, Testimonial',
-                            'IT Matters (HRP, HR Online, AM Assist)',
-                            'Updating of Personal Particulars and Educational Qualifications',
-                            'Pre-NIE/NIE Admission Matters', 'PS and CS Cards', 'Discipline',
-                            'Urgent Private Affairs Leave/Vacation Leave/Sabbatical Leave',
-                            'Insurance', 'Scholarships and Talent Management', 'Salary Matters',
-                            'Confirmation after probation', 'Bond and Liquidated Damages',
-                            'Injuries During Course of Work', 'Performance Reward',
-                            'Annual Declaration', 'Flexi Work Arrangement', 'Other Leave', 'HRP GRC',
-                            'Compensation Policy', 'HRP Payroll', 'HRP Employee Service',
-                            'Working Hours / Workload', 'Election Manpower Matters', 'Starting Salary',
-                            "Employees requested/CSC provided HR's contact", 'Claims - LDS, Others',
-                            'MKE Commitment Payment', 'HRP Others',
-                            'Participation in External Activities',
-                            'HRG – Organisational Development & Psychology',
-                            'Transfer of service/scheme', 'Contractual Matters and Contract Renewal',
-                            'HRP Deploy', 'Training-Related (PSIP, Induction Courses)',
-                            'Change of Subject Proficiency', 'Contributions to Charity',
-                            'Salary Review',
-                            'Key Personnel/Senior, Lead, Master And Principal Master Teacher Matters',
-                            'Career Development', 'HRP Perform', 'SIUE', 'Emplacement Matters',
-                            'HRP Attract', 'Emplacement Salary', 'Other Benefits', 'CPF and Income Tax',
-                            'Annual Exercise', 'HRG – Carpark Charges Masterlist',
-                            'HRP Data Management', 'Returning to Service', 'Deceased',
-                            'Students - Teacher Ratio Matters', 'Benefits Policy',
-                            'IT Matters (iCON, CES Email, TRAISI)',
-                            'MK Matters: Internship and Work Attachment',
-                            'Performance Appraisal (MKEs)', 'Review of Scheme of Service',
-                            'Outstanding Contribution Award', 'Posting Policy', 'HRP Develop',
-                            'Career Management', 'Senior Key Personnel (KP) Rotation'
-                        ]
-                        
-                        spp_definitions = """
-                        Policy: Related to criteria, policy clarifications
-                        Process: Related to procedures, requests, timeline, submission of documents
-                        System: Related to technical issues
-                        """
-                        
-                        # Save to temporary file for processing
-                        temp_file = "temp_processing_data.csv"
-                        df_to_process.to_csv(temp_file, index=False)
-                        
-                        # Show progress
-                        with progress_container.container():
-                            st.progress(0.5, text="Processing queries...")
-                        
-                        with status_container.container():
-                            st.info("Processing queries with AI models...")
-                        
-                        # Process the queries (BACK TO ORIGINAL FUNCTION CALL)
-                        result_df = process_hr_queries(
-                            temp_file, 
-                            query_column, 
-                            topic_categories, 
-                            spp_definitions
+                        # USE THE EXISTING process_queries_with_live_updates FUNCTION
+                        result_df = process_queries_with_live_updates(
+                            df.head(st.session_state['total_queries_to_process']),
+                            query_column,
+                            st.session_state['total_queries_to_process'],
+                            progress_container,
+                            status_container
                         )
-                        
-                        # Clean up temp file
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
                         
                         st.session_state['processed_data'] = result_df
                         st.session_state['processing_state'] = 'complete'
                         
-                        # Generate summary
-                        summary = get_processing_summary(result_df)
-                        st.session_state['last_processing_stats'] = summary
+                        # Generate summary (simple version since get_processing_summary might not exist)
+                        try:
+                            from hr_classifier_py import get_processing_summary
+                            summary = get_processing_summary(result_df)
+                            st.session_state['last_processing_stats'] = summary
+                        except ImportError:
+                            # Create a simple summary if the function doesn't exist
+                            success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
+                            total_count = len(result_df)
+                            summary = {
+                                'total_queries': total_count,
+                                'success_count': success_count,
+                                'success_rate': (success_count / total_count * 100) if total_count > 0 else 0
+                            }
+                            st.session_state['last_processing_stats'] = summary
+                        
                         if 'activity_log' not in st.session_state:
                             st.session_state['activity_log'] = []
                         st.session_state['activity_log'].append(
@@ -755,6 +699,16 @@ def show_batch_classifier():
             elif st.session_state['processing_state'] == 'error':
                 error_msg = st.session_state.get('processing_error', 'Unknown error occurred')
                 button_placeholder.error(f"Processing Error! {error_msg}")
+                
+                # Show error details
+                with st.expander("Error Details"):
+                    st.code(error_msg)
+                    st.write("**Common solutions:**")
+                    st.write("- Check your API key is valid")
+                    st.write("- Try processing fewer queries")
+                    st.write("- Check your internet connection")
+                    st.write("- Wait a few minutes and retry")
+                
                 if st.button("Retry Processing", use_container_width=True):
                     # Clear error state
                     keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']

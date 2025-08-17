@@ -779,7 +779,7 @@ def show_rag_chatbot():
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Go to Batch Classifier", type="primary", use_container_width=True):
+            if st.button("Go to Batch Classifier", use_container_width=True):
                 st.session_state['current_page'] = "Batch Classifier"
                 st.rerun()
         
@@ -880,7 +880,7 @@ def show_rag_chatbot():
                 )
             
             if selected_topics:
-                if st.button("Setup Knowledge Base", type="primary", use_container_width=True):
+                if st.button("Setup Knowledge Base", use_container_width=True):
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     

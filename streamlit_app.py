@@ -1274,7 +1274,7 @@ def show_methodology():
         """)
         
         # Display the Mermaid diagram image from GitHub
-        github_raw_url = "https://raw.githubusercontent.com/username/hr-query-classifier-and-bot/main/process_flow_mermaid_chart.png"
+        github_raw_url = "https://raw.githubusercontent.com/yeoksyeoks/hr-query-classifier-and-bot/main/process_flow_mermaid_chart.png"
         
         try:
             st.image(github_raw_url, 

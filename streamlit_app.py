@@ -320,6 +320,180 @@ def show_home():
         else:
             st.info("No recent activity")
 
+def process_queries_with_live_updates(df_process, query_column, total_queries, progress_container, status_container):
+    """Process queries with real-time progress updates"""
+
+    # Import here to avoid circular imports
+    from hr_classifier_py import summarise_hr_query, classify_hr_topic, classify_system_process_policy
+
+    # Topic categories
+    topic_categories = [
+        'Annual Variable Component and CONNECT Plan', 'Recruitment', 'Posting',
+        'Other HR Matters', 'Medical Leave', 'Performance Appraisal',
+        'Professional Development', 'Casual Employment Scheme',
+        'Pro-Family Full Pay Leave', 'Medical and Dental Benefits',
+        'Leaving Service', 'No-Pay Leave', 'Awards',
+        'Letter of Employment, Testimonial',
+        'IT Matters (HRP, HR Online, AM Assist)',
+        'Updating of Personal Particulars and Educational Qualifications',
+        'Pre-NIE/NIE Admission Matters', 'PS and CS Cards', 'Discipline',
+        'Urgent Private Affairs Leave/Vacation Leave/Sabbatical Leave',
+        'Insurance', 'Scholarships and Talent Management', 'Salary Matters',
+        'Confirmation after probation', 'Bond and Liquidated Damages',
+        'Injuries During Course of Work', 'Performance Reward',
+        'Annual Declaration', 'Flexi Work Arrangement', 'Other Leave', 'HRP GRC',
+        'Compensation Policy', 'HRP Payroll', 'HRP Employee Service',
+        'Working Hours / Workload', 'Election Manpower Matters', 'Starting Salary',
+        "Employees requested/CSC provided HR's contact", 'Claims - LDS, Others',
+        'MKE Commitment Payment', 'HRP Others',
+        'Participation in External Activities',
+        'HRG – Organisational Development & Psychology',
+        'Transfer of service/scheme', 'Contractual Matters and Contract Renewal',
+        'HRP Deploy', 'Training-Related (PSIP, Induction Courses)',
+        'Change of Subject Proficiency', 'Contributions to Charity',
+        'Salary Review',
+        'Key Personnel/Senior, Lead, Master And Principal Master Teacher Matters',
+        'Career Development', 'HRP Perform', 'SIUE', 'Emplacement Matters',
+        'HRP Attract', 'Emplacement Salary', 'Other Benefits', 'CPF and Income Tax',
+        'Annual Exercise', 'HRG – Carpark Charges Masterlist',
+        'HRP Data Management', 'Returning to Service', 'Deceased',
+        'Students - Teacher Ratio Matters', 'Benefits Policy',
+        'IT Matters (iCON, CES Email, TRAISI)',
+        'MK Matters: Internship and Work Attachment',
+        'Performance Appraisal (MKEs)', 'Review of Scheme of Service',
+        'Outstanding Contribution Award', 'Posting Policy', 'HRP Develop',
+        'Career Management', 'Senior Key Personnel (KP) Rotation'
+    ]
+
+    spp_definitions = """
+    Policy: Related to criteria, policy clarifications
+    Process: Related to procedures, requests, timeline, submission of documents
+    System: Related to technical issues
+    """
+
+    # Initialise result dataframe
+    result_df = df_process.copy()
+    result_df['summary'] = ''
+    result_df['topic_classification'] = ''
+    result_df['spp_classification'] = ''
+    result_df['processing_status'] = ''
+
+    # Process each query with live updates
+    processed_count = 0
+    success_count = 0
+    error_count = 0
+
+    for index, row in result_df.iterrows():
+        query = row[query_column]
+        processed_count += 1
+
+        # Calculate progress
+        progress_percentage = (processed_count / total_queries) * 100
+
+        # Update session_state for live values
+        st.session_state['processing_progress'] = {
+            'processed': processed_count,
+            'total': total_queries,
+            'successful': success_count,
+            'errors': error_count,
+            'percentage': progress_percentage
+        }
+
+        # Update progress display in real-time
+        with progress_container.container():
+            st.progress(progress_percentage / 100)
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Processed", f"{processed_count}/{total_queries}")
+            with col2:
+                st.metric("Successful", success_count)
+            with col3:
+                st.metric("Errors", error_count)
+            with col4:
+                st.metric("Progress", f"{progress_percentage:.1f}%")
+
+        # Update status with current query
+        with status_container.container():
+            if pd.isna(query) or str(query).strip() == '':
+                st.info(f"Skipping empty query {processed_count}/{total_queries}")
+            else:
+                st.info(f"Processing query {processed_count}/{total_queries}: {str(query)[:100]}...")
+
+        if pd.isna(query) or str(query).strip() == '':
+            result_df.at[index, 'processing_status'] = 'SKIPPED - Empty query'
+            continue
+
+        try:
+            # Update status for summarisation
+            with status_container.container():
+                st.info(f"Summarising query {processed_count}...")
+
+            # Generate summary
+            summary = summarise_hr_query(query)
+            result_df.at[index, 'summary'] = summary
+            time.sleep(0.1)
+
+            # Update status for topic classification
+            with status_container.container():
+                st.info(f"Categorising topic for query {processed_count}...")
+
+            # Classify topic
+            topic = classify_hr_topic(query, topic_categories)
+            result_df.at[index, 'topic_classification'] = topic
+            time.sleep(0.1)
+
+            # Update status for SPP classification
+            with status_container.container():
+                st.info(f"Categorising SPP for query {processed_count}...")
+
+            # Classify SPP
+            spp_class = classify_system_process_policy(query, spp_definitions)
+            result_df.at[index, 'spp_classification'] = spp_class
+
+            result_df.at[index, 'processing_status'] = 'SUCCESS'
+            success_count += 1
+
+            # Show success for current query
+            with status_container.container():
+                st.success(f"Completed query {processed_count}: {topic} | {spp_class}")
+
+            time.sleep(0.2)
+
+        except Exception as e:
+            result_df.at[index, 'processing_status'] = f'ERROR: {str(e)}'
+            error_count += 1
+
+            # Show error for current query
+            with status_container.container():
+                st.error(f"Error processing query {processed_count}: {str(e)}")
+
+        # Update session state after processing each query
+        st.session_state['processing_progress'] = {
+            'processed': processed_count,
+            'total': total_queries,
+            'successful': success_count,
+            'errors': error_count,
+            'percentage': (processed_count / total_queries) * 100
+        }
+
+    # Final progress update
+    with progress_container.container():
+        st.progress(1.0)
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Processed", f"{processed_count}/{total_queries}")
+        with col2:
+            st.metric("Successful", success_count)
+        with col3:
+            st.metric("Errors", error_count)
+        with col4:
+            st.metric("Progress", "100.0%")
+
+    with status_container.container():
+        st.success(f"Processing complete! {success_count} successful, {error_count} errors")
+
+    return result_df
+
 def show_batch_classifier():
     st.title("Batch HR Query Classifier")
     st.markdown("Upload and process multiple HR queries for automated categorisation and summarisation.")

@@ -323,6 +323,16 @@ def show_home():
 def show_batch_classifier():
     st.title("Batch HR Query Classifier")
     
+    # ---------------------------------------------
+    # --- IMPORTANT: INITIALIZE SESSION STATE ---
+    # ---------------------------------------------
+    if 'processing_state' not in st.session_state:
+        st.session_state['processing_state'] = 'ready'
+    if 'processed_data' not in st.session_state:
+        st.session_state['processed_data'] = None
+    if 'processing_completed' not in st.session_state:
+        st.session_state['processing_completed'] = False
+
     if not CLASSIFIER_AVAILABLE:
         st.error("**Classifier Module Unavailable**: There was an error loading the classification module.")
         st.info("This could be due to:")
@@ -388,18 +398,10 @@ def show_batch_classifier():
 
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
-            return # Exit the function if file reading fails
-        
-        # This is where the new code block should go
-        # It is correctly indented to be inside the "if uploaded_file is not None:" block,
-        # but is placed after the file-reading try/except block.
+            return
         
         st.markdown("### Process Queries")
         
-        # Initialise processing state
-        if 'processing_state' not in st.session_state:
-            st.session_state['processing_state'] = 'ready'
-
         # Create placeholders for live updates
         progress_container = st.empty()
         status_container = st.empty()
@@ -407,7 +409,6 @@ def show_batch_classifier():
         # Create placeholder for main action button
         button_placeholder = st.empty()
 
-        # Logic to render correct button and handle state transitions
         if st.session_state['processing_state'] == 'ready':
             if button_placeholder.button("Start Processing", type="secondary", use_container_width=True):
                 if not os.getenv('OPENAI_API_KEY'):
@@ -421,7 +422,7 @@ def show_batch_classifier():
         elif st.session_state['processing_state'] == 'processing':
             button_placeholder.info("Processing in progress... Please wait.")
 
-            if 'processing_completed' not in st.session_state:
+            if not st.session_state['processing_completed']:
                 try:
                     result_df = process_queries_with_live_updates(
                         df.head(st.session_state['total_queries_to_process']),
@@ -465,13 +466,14 @@ def show_batch_classifier():
         elif st.session_state['processing_state'] == 'error':
             button_placeholder.error("Processing Error! Retry below.")
             if st.button("Retry Processing", use_container_width=True):
-                del st.session_state['processed_data']
+                if 'processed_data' in st.session_state:
+                    del st.session_state['processed_data']
                 if 'processing_completed' in st.session_state:
                     del st.session_state['processing_completed']
                 st.session_state['processing_state'] = 'ready'
                 st.rerun()
 
-        if 'processed_data' in st.session_state and st.session_state['processing_state'] in ['complete', 'error']:
+        if st.session_state['processed_data'] is not None and st.session_state['processing_state'] in ['complete', 'error']:
             st.markdown("### Processing Results")
             result_df = st.session_state['processed_data']
             col1, col2, col3 = st.columns(3)

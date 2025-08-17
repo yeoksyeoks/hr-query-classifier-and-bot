@@ -494,9 +494,6 @@ def show_batch_classifier():
                 mime="text/csv",
                 use_container_width=True
             )
-                    
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
 
 def show_rag_chatbot():
     st.title("RAG-Powered HR Chatbot")

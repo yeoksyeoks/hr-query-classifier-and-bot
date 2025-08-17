@@ -1026,43 +1026,38 @@ def show_rag_chatbot():
                         f"{datetime.now().strftime('%H:%M')} - Asked about {selected_topic}"
                     )
         
-        # Additional options - following original structure
+        # Additional options
         st.markdown("### Additional Options")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("Topic Information", use_container_width=True):
-                topic_info = rag_bot.get_topic_info(selected_topic)
-                with st.expander("Topic Details"):
-                    st.json(topic_info)
+            if st.session_state[chat_key]:
+                # Create DataFrame from chat history for direct download
+                chat_data = []
+                for chat in st.session_state[chat_key]:
+                    chat_data.append({
+                        'timestamp': chat.get('timestamp', ''),
+                        'topic': chat.get('topic', selected_topic),
+                        'question': chat.get('question', ''),
+                        'answer': chat.get('answer', ''),
+                        'sources_count': chat.get('num_sources', 0)
+                    })
+                
+                chat_df = pd.DataFrame(chat_data)
+                csv = chat_df.to_csv(index=False)
+                
+                st.download_button(
+                    label="Download Chat History",
+                    data=csv,
+                    file_name=f"chat_history_{selected_topic}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.info("No chat history to download")
         
         with col2:
-            if st.button("Download Chat History", use_container_width=True):
-                if st.session_state[chat_key]:
-                    # Create DataFrame from chat history
-                    chat_data = []
-                    for chat in st.session_state[chat_key]:
-                        chat_data.append({
-                            'timestamp': chat.get('timestamp', ''),
-                            'topic': chat.get('topic', selected_topic),
-                            'question': chat.get('question', ''),
-                            'answer': chat.get('answer', ''),
-                            'sources_count': chat.get('num_sources', 0)
-                        })
-                    
-                    chat_df = pd.DataFrame(chat_data)
-                    csv = chat_df.to_csv(index=False)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv,
-                        file_name=f"chat_history_{selected_topic}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.info("No chat history to download")
-        
-        with col3:
             if st.button("Restart Setup", use_container_width=True):
                 # Clear RAG bot state but keep processed data
                 keys_to_clear = ['rag_bot', 'rag_bot_ready']

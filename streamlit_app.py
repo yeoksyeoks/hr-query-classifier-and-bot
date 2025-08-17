@@ -332,6 +332,9 @@ def show_batch_classifier():
         st.session_state['processed_data'] = None
     if 'processing_completed' not in st.session_state:
         st.session_state['processing_completed'] = False
+    # Add a new flag to control the retry button behavior
+    if 'retry_requested' not in st.session_state:
+        st.session_state['retry_requested'] = False
 
     if not CLASSIFIER_AVAILABLE:
         st.error("**Classifier Module Unavailable**: There was an error loading the classification module.")
@@ -465,12 +468,14 @@ def show_batch_classifier():
                     
         elif st.session_state['processing_state'] == 'error':
             button_placeholder.error("Processing Error! Retry below.")
-            if st.button("Retry Processing", use_container_width=True):
-                if 'processed_data' in st.session_state:
-                    del st.session_state['processed_data']
-                if 'processing_completed' in st.session_state:
-                    del st.session_state['processing_completed']
+            if st.button("Retry Processing", use_container_width=True, key="retry_button"):
+                st.session_state['retry_requested'] = True
+                
+            if st.session_state['retry_requested']:
+                del st.session_state['processed_data']
+                del st.session_state['processing_completed']
                 st.session_state['processing_state'] = 'ready'
+                st.session_state['retry_requested'] = False
                 st.rerun()
 
         if st.session_state['processed_data'] is not None and st.session_state['processing_state'] in ['complete', 'error']:

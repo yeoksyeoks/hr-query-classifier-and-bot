@@ -643,11 +643,38 @@ def show_batch_classifier():
                 # This block runs after 'Start Processing' button is clicked
                 if 'processing_completed' not in st.session_state:
                     try:
-                        # Import the necessary functions
-                        from hr_classifier_py import process_hr_queries, get_processing_summary
+                        # Detailed debug logging
+                        debug_info = []
+                        debug_info.append("Starting processing...")
                         
-                        # Get the subset of data to process
-                        df_to_process = df.head(st.session_state['total_queries_to_process'])
+                        # Check if import is successful
+                        try:
+                            from hr_classifier_py import process_hr_queries, get_processing_summary
+                            debug_info.append("✅ Import successful")
+                        except ImportError as e:
+                            debug_info.append(f"❌ Import failed: {str(e)}")
+                            raise e
+                        
+                        # Validate data
+                        debug_info.append(f"Data validation: {len(df)} total rows")
+                        
+                        # Check if the selected column exists and has valid data
+                        if query_column not in df.columns:
+                            raise ValueError(f"Selected column '{query_column}' not found in data")
+                            
+                        # Check for empty queries
+                        df_subset = df.head(max_queries).copy()
+                        empty_queries = df_subset[query_column].isnull().sum()
+                        if empty_queries > 0:
+                            debug_info.append(f"⚠️ Found {empty_queries} empty queries")
+                            # Remove empty queries
+                            df_subset = df_subset[df_subset[query_column].notna()]
+                            debug_info.append(f"Processing {len(df_subset)} non-empty queries")
+                        else:
+                            debug_info.append(f"✅ All {len(df_subset)} queries have content")
+                        
+                        if len(df_subset) == 0:
+                            raise ValueError("No valid queries found to process")
                         
                         # Topic categories (same as in your original code)
                         topic_categories = [
@@ -694,35 +721,102 @@ def show_batch_classifier():
                         System: Related to technical issues
                         """
                         
-                        # Save to temporary file for processing
-                        temp_file = "temp_processing_data.csv"
-                        df_to_process.to_csv(temp_file, index=False)
+                        debug_info.append(f"✅ Configuration complete: {len(topic_categories)} categories")
                         
-                        # Process the queries
-                        with progress_container.container():
-                            st.progress(0.5, text="Processing queries...")
-                        
+                        # Update status with debug info
                         with status_container.container():
-                            st.info("Processing queries with AI models...")
+                            st.info("🔍 Processing queries... (Debug mode enabled)")
+                            with st.expander("Debug Information"):
+                                for info in debug_info:
+                                    st.write(info)
                         
-                        result_df = process_hr_queries(
-                            temp_file, 
-                            query_column, 
-                            topic_categories, 
-                            spp_definitions
-                        )
+                        # Create temporary file with better error handling
+                        import tempfile
+                        import uuid
+                        
+                        temp_file = f"temp_processing_data_{uuid.uuid4().hex[:8]}.csv"
+                        debug_info.append(f"Creating temp file: {temp_file}")
+                        
+                        try:
+                            df_subset.to_csv(temp_file, index=False)
+                            debug_info.append("✅ Temp file created successfully")
+                        except Exception as e:
+                            debug_info.append(f"❌ Failed to create temp file: {str(e)}")
+                            raise e
+                        
+                        # Update progress
+                        with progress_container.container():
+                            st.progress(0.3, text="Processing queries with AI models...")
+                        
+                        # Process the queries with timeout and retry logic
+                        max_retries = 3
+                        retry_count = 0
+                        result_df = None
+                        
+                        while retry_count < max_retries and result_df is None:
+                            try:
+                                debug_info.append(f"Processing attempt {retry_count + 1}/{max_retries}")
+                                
+                                # Update status
+                                with status_container.container():
+                                    st.info(f"🤖 Processing queries... (Attempt {retry_count + 1})")
+                                    with st.expander("Debug Information"):
+                                        for info in debug_info:
+                                            st.write(info)
+                                
+                                result_df = process_hr_queries(
+                                    temp_file, 
+                                    query_column, 
+                                    topic_categories, 
+                                    spp_definitions
+                                )
+                                
+                                debug_info.append("✅ Processing completed successfully")
+                                break
+                                
+                            except Exception as e:
+                                retry_count += 1
+                                error_msg = str(e)
+                                debug_info.append(f"❌ Attempt {retry_count} failed: {error_msg}")
+                                
+                                if retry_count < max_retries:
+                                    debug_info.append(f"⏳ Retrying in 5 seconds...")
+                                    time.sleep(5)
+                                else:
+                                    debug_info.append("❌ All retry attempts exhausted")
+                                    raise e
                         
                         # Clean up temp file
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
+                        try:
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                                debug_info.append("✅ Temp file cleaned up")
+                        except Exception as e:
+                            debug_info.append(f"⚠️ Failed to cleanup temp file: {str(e)}")
+                        
+                        # Validate results
+                        if result_df is None or len(result_df) == 0:
+                            raise ValueError("Processing returned no results")
+                        
+                        debug_info.append(f"✅ Results validated: {len(result_df)} processed queries")
+                        
+                        # Update progress
+                        with progress_container.container():
+                            st.progress(0.9, text="Finalizing results...")
                         
                         # Store results
                         st.session_state['processed_data'] = result_df
                         st.session_state['processing_state'] = 'complete'
+                        st.session_state['debug_info'] = debug_info
                         
                         # Generate summary
-                        summary = get_processing_summary(result_df)
-                        st.session_state['last_processing_stats'] = summary
+                        try:
+                            summary = get_processing_summary(result_df)
+                            st.session_state['last_processing_stats'] = summary
+                            debug_info.append("✅ Summary generated")
+                        except Exception as e:
+                            debug_info.append(f"⚠️ Failed to generate summary: {str(e)}")
+                            # Continue without summary
                         
                         # Update activity log
                         if 'activity_log' not in st.session_state:
@@ -732,16 +826,38 @@ def show_batch_classifier():
                         )
                         
                         st.session_state['processing_completed'] = True
+                        
+                        # Final progress update
+                        with progress_container.container():
+                            st.progress(1.0, text="Processing complete!")
+                        
                         st.rerun()
                         
                     except Exception as e:
+                        # Detailed error handling
+                        error_details = {
+                            'error_type': type(e).__name__,
+                            'error_message': str(e),
+                            'timestamp': datetime.now().isoformat(),
+                        }
+                        
+                        # Add debug information if available
+                        if 'debug_info' in locals():
+                            error_details['debug_info'] = debug_info
+                        
                         st.session_state['processing_state'] = 'error'
-                        st.session_state['processing_error'] = str(e)
+                        st.session_state['processing_error'] = error_details
                         st.session_state['processing_completed'] = True
                         st.rerun()
 
             elif st.session_state['processing_state'] == 'complete':
                 button_placeholder.success("✅ Processing Complete! View results below.")
+                
+                # Show debug info if available
+                if 'debug_info' in st.session_state:
+                    with st.expander("Processing Debug Log"):
+                        for info in st.session_state['debug_info']:
+                            st.write(info)
                 
                 col_go, col_reset = st.columns(2)
                 with col_go:
@@ -751,7 +867,7 @@ def show_batch_classifier():
                 with col_reset:
                     if st.button("🔄 Process Another Batch", use_container_width=True):
                         # Clear processing state
-                        keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
+                        keys_to_clear = ['processed_data', 'processing_completed', 'processing_error', 'debug_info']
                         for key in keys_to_clear:
                             if key in st.session_state:
                                 del st.session_state[key]
@@ -759,17 +875,36 @@ def show_batch_classifier():
                         st.rerun()
             
             elif st.session_state['processing_state'] == 'error':
-                error_msg = st.session_state.get('processing_error', 'Unknown error occurred')
-                button_placeholder.error(f"❌ Processing Error: {error_msg}")
+                error_details = st.session_state.get('processing_error', {})
+                error_msg = error_details.get('error_message', 'Unknown error occurred')
+                error_type = error_details.get('error_type', 'Unknown')
                 
-                if st.button("🔄 Retry Processing", use_container_width=True):
-                    # Clear error state
-                    keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
-                    for key in keys_to_clear:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.session_state['processing_state'] = 'ready'
-                    st.rerun()
+                button_placeholder.error(f"❌ Processing Error ({error_type}): {error_msg}")
+                
+                # Show detailed error information
+                with st.expander("Error Details"):
+                    st.json(error_details)
+                
+                col_retry, col_reset = st.columns(2)
+                with col_retry:
+                    if st.button("🔄 Retry Processing", type="primary", use_container_width=True):
+                        # Clear error state but keep data
+                        keys_to_clear = ['processing_completed', 'processing_error', 'debug_info']
+                        for key in keys_to_clear:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.session_state['processing_state'] = 'ready'
+                        st.rerun()
+                        
+                with col_reset:
+                    if st.button("🆕 Start Fresh", use_container_width=True):
+                        # Clear all processing state
+                        keys_to_clear = ['processed_data', 'processing_completed', 'processing_error', 'debug_info']
+                        for key in keys_to_clear:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.session_state['processing_state'] = 'ready'
+                        st.rerun()
 
             # Show results if processing is complete
             if ('processed_data' in st.session_state and 
@@ -783,7 +918,12 @@ def show_batch_classifier():
                 with col1:
                     st.metric("Total Processed", len(result_df))
                 with col2:
-                    success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
+                    # Handle case where 'processing_status' column might not exist
+                    if 'processing_status' in result_df.columns:
+                        success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
+                    else:
+                        # Assume all are successful if no status column
+                        success_count = len(result_df)
                     st.metric("Successful", success_count)
                 with col3:
                     success_rate = (success_count / len(result_df)) * 100 if len(result_df) > 0 else 0
@@ -805,7 +945,17 @@ def show_batch_classifier():
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
             st.info("Please check that your CSV file is properly formatted.")
-
+            
+            # Show file reading error details
+            with st.expander("File Error Details"):
+                st.write("**Error Type:**", type(e).__name__)
+                st.write("**Error Message:**", str(e))
+                st.write("**Suggestions:**")
+                st.write("- Ensure the file is a valid CSV format")
+                st.write("- Check for special characters in column names")
+                st.write("- Verify the file is not corrupted")
+                st.write("- Try saving the file with UTF-8 encoding")
+                
 def show_rag_chatbot():
     st.title("RAG-Powered HR Chatbot")
     

@@ -766,10 +766,302 @@ def show_rag_chatbot():
         
         return
     
+    # Check API key first
+    if not os.getenv('OPENAI_API_KEY'):
+        st.error("**API Key Required**: Please configure your OpenAI API key in the sidebar before using the chatbot.")
+        st.info("**Tip**: Look for the 'Configure API Key' section in the left sidebar.")
+        return
+    
     st.markdown("Chat with our AI assistant about HR topics based on processed query knowledge base.")
     
-    # Your existing RAG chatbot logic here
-    st.info("RAG Chatbot functionality would be available here when ChromaDB is working properly.")
+    # Initialize RAG bot in session state
+    if 'rag_bot' not in st.session_state:
+        st.session_state['rag_bot'] = None
+        st.session_state['rag_bot_ready'] = False
+        st.session_state['rag_setup_status'] = 'not_started'
+    
+    # Setup section
+    st.markdown("### Setup Knowledge Base")
+    
+    # File upload for processed data
+    if st.session_state['rag_setup_status'] == 'not_started':
+        st.info("Upload your processed HR data to create the knowledge base.")
+        
+        uploaded_file = st.file_uploader(
+            "Upload processed HR queries CSV",
+            type=['csv'],
+            help="Upload the CSV file with processed HR queries (must contain 'summary' and 'topic_classification' columns)",
+            key="rag_file_upload"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Initialize RAG bot
+                from hr_rag_bot_py import HRQueryRAGBot
+                
+                with st.spinner("Initializing RAG bot..."):
+                    rag_bot = HRQueryRAGBot()
+                    
+                # Load data
+                with st.spinner("Loading processed data..."):
+                    df = pd.read_csv(uploaded_file)
+                    st.success(f"Loaded {len(df)} processed queries")
+                    
+                    # Save uploaded file temporarily
+                    temp_file_path = f"temp_processed_data_{int(time.time())}.csv"
+                    df.to_csv(temp_file_path, index=False)
+                    
+                    # Load data into RAG bot
+                    rag_bot.load_processed_data(temp_file_path)
+                    
+                    # Clean up temp file
+                    try:
+                        os.remove(temp_file_path)
+                    except:
+                        pass
+                
+                # Show available topics
+                available_topics = rag_bot.list_available_topics()
+                st.success(f"Found {len(available_topics)} different HR topics")
+                
+                # Topic selection
+                st.markdown("### Select Topics for Knowledge Base")
+                
+                # Show topic distribution
+                topic_counts = df['topic_classification'].value_counts()
+                
+                with st.expander("Topic Distribution"):
+                    st.bar_chart(topic_counts.head(10))
+                
+                # Multi-select for topics
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    selected_topics = st.multiselect(
+                        "Choose topics to include in knowledge base:",
+                        options=available_topics,
+                        default=topic_counts.head(5).index.tolist(),
+                        help="Select topics you want to chat about. More topics = longer setup time."
+                    )
+                
+                with col2:
+                    max_topics = st.number_input(
+                        "Max topics to setup:",
+                        min_value=1,
+                        max_value=20,
+                        value=5,
+                        help="Limit topics to avoid long setup times"
+                    )
+                
+                if selected_topics:
+                    if st.button("Setup Knowledge Base", type="primary", use_container_width=True):
+                        st.session_state['rag_setup_status'] = 'setting_up'
+                        st.session_state['selected_topics'] = selected_topics[:max_topics]
+                        st.session_state['rag_bot'] = rag_bot
+                        st.rerun()
+            
+            except Exception as e:
+                st.error(f"Error setting up RAG bot: {str(e)}")
+                st.info("Please check that your CSV file has the required columns: 'summary', 'topic_classification'")
+    
+    elif st.session_state['rag_setup_status'] == 'setting_up':
+        st.info("Setting up knowledge base... This may take a few minutes.")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            rag_bot = st.session_state['rag_bot']
+            selected_topics = st.session_state['selected_topics']
+            
+            # Setup topics with progress updates
+            for i, topic in enumerate(selected_topics):
+                progress = (i / len(selected_topics))
+                progress_bar.progress(progress)
+                status_text.text(f"Setting up topic {i+1}/{len(selected_topics)}: {topic}")
+                
+                try:
+                    rag_bot.create_topic_vector_database(topic)
+                except Exception as e:
+                    st.warning(f"Failed to setup topic '{topic}': {str(e)}")
+            
+            progress_bar.progress(1.0)
+            status_text.text("Knowledge base setup complete!")
+            
+            # Update session state
+            st.session_state['rag_bot_ready'] = True
+            st.session_state['rag_setup_status'] = 'complete'
+            st.session_state['rag_bot_status'] = rag_bot.get_setup_status()
+            
+            st.success("Knowledge base ready! You can now start chatting.")
+            time.sleep(2)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Error during setup: {str(e)}")
+            st.session_state['rag_setup_status'] = 'error'
+    
+    elif st.session_state['rag_setup_status'] == 'complete':
+        # Chat interface
+        rag_bot = st.session_state['rag_bot']
+        ready_topics = rag_bot.list_ready_topics()
+        
+        if not ready_topics:
+            st.error("No topics are ready for chatting. Please restart the setup.")
+            if st.button("Restart Setup"):
+                # Clear RAG bot state
+                keys_to_clear = ['rag_bot', 'rag_bot_ready', 'rag_setup_status', 'selected_topics', 'rag_bot_status']
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+            return
+        
+        # Show knowledge base status
+        st.success(f"Knowledge base ready with {len(ready_topics)} topics!")
+        
+        with st.expander("Knowledge Base Status"):
+            status = rag_bot.get_setup_status()
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Queries", status['total_queries'])
+            with col2:
+                st.metric("Available Topics", status['total_topics_available'])
+            with col3:
+                st.metric("Ready Topics", status['topics_with_vector_db'])
+        
+        # Topic selection for chat
+        st.markdown("### Chat Interface")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            selected_topic = st.selectbox(
+                "Choose HR topic to discuss:",
+                options=ready_topics,
+                help="Select the HR topic you want to ask questions about"
+            )
+        
+        with col2:
+            show_sources = st.checkbox("Show sources", value=True, help="Display source documents with responses")
+        
+        # Initialize chat history for the selected topic
+        chat_key = f"chat_history_{selected_topic.replace(' ', '_')}"
+        if chat_key not in st.session_state:
+            st.session_state[chat_key] = []
+        
+        # Display chat history
+        st.markdown("### Chat History")
+        
+        chat_container = st.container()
+        
+        with chat_container:
+            if st.session_state[chat_key]:
+                for i, chat in enumerate(st.session_state[chat_key]):
+                    # User message
+                    with st.chat_message("user"):
+                        st.write(chat['question'])
+                    
+                    # Assistant response
+                    with st.chat_message("assistant"):
+                        if 'error' in chat:
+                            st.error(chat['error'])
+                        else:
+                            st.write(chat['answer'])
+                            
+                            # Show sources if available
+                            if show_sources and 'sources' in chat:
+                                with st.expander(f"Sources ({chat.get('num_sources', 0)})"):
+                                    for source in chat['sources']:
+                                        st.markdown(f"**Source {source['source_number']}:**")
+                                        st.text(source['content'])
+                                        if source['metadata']:
+                                            st.json(source['metadata'])
+            else:
+                st.info(f"Start chatting about {selected_topic}! Ask any questions related to this HR topic.")
+        
+        # Chat input
+        st.markdown("### Ask a Question")
+        
+        with st.form("chat_form", clear_on_submit=True):
+            user_question = st.text_area(
+                "Your question:",
+                placeholder=f"Ask anything about {selected_topic}...",
+                height=100
+            )
+            
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                submit_button = st.form_submit_button("Ask", type="primary")
+            with col2:
+                if st.form_submit_button("Clear History"):
+                    st.session_state[chat_key] = []
+                    st.rerun()
+        
+        if submit_button and user_question.strip():
+            with st.spinner("Thinking..."):
+                # Get response from RAG bot
+                response = rag_bot.chat_with_topic(
+                    topic=selected_topic,
+                    question=user_question,
+                    show_sources=show_sources
+                )
+                
+                # Add to chat history
+                st.session_state[chat_key].append(response)
+                
+                # Update activity log
+                if 'activity_log' not in st.session_state:
+                    st.session_state['activity_log'] = []
+                st.session_state['activity_log'].append(
+                    f"{datetime.now().strftime('%H:%M')} - Asked about {selected_topic}"
+                )
+                
+                st.rerun()
+        
+        # Additional options
+        st.markdown("### Additional Options")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("Topic Information", use_container_width=True):
+                topic_info = rag_bot.get_topic_info(selected_topic)
+                st.json(topic_info)
+        
+        with col2:
+            if st.button("Download Chat History", use_container_width=True):
+                if st.session_state[chat_key]:
+                    chat_df = pd.DataFrame(st.session_state[chat_key])
+                    csv = chat_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name=f"chat_history_{selected_topic}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("No chat history to download")
+        
+        with col3:
+            if st.button("Restart Setup", use_container_width=True):
+                # Clear RAG bot state
+                keys_to_clear = ['rag_bot', 'rag_bot_ready', 'rag_setup_status', 'selected_topics', 'rag_bot_status']
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                # Clear chat histories
+                chat_keys = [key for key in st.session_state.keys() if key.startswith('chat_history_')]
+                for key in chat_keys:
+                    del st.session_state[key]
+                st.rerun()
+    
+    elif st.session_state['rag_setup_status'] == 'error':
+        st.error("There was an error during knowledge base setup.")
+        
+        if st.button("Try Again", type="primary"):
+            st.session_state['rag_setup_status'] = 'not_started'
+            st.rerun()
 
 def show_about_us():
     st.title("About Us")

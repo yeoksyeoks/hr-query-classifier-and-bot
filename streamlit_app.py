@@ -1263,7 +1263,36 @@ def show_methodology():
     
     Regular output validation is recommended, particularly for complex policy interpretations requiring human expertise.
     """)
-
+    
+    st.markdown("---")
+    
+    # Process Flow Diagram
+    with st.expander("System Process Flow Diagram"):
+        st.markdown("### Complete System Workflow")
+        st.write("""
+        The diagram below illustrates the complete data flow from CSV upload through classification to interactive chat functionality, showing how both components integrate to create a comprehensive HR query analysis system.
+        """)
+        
+        # Display the Mermaid diagram image from GitHub
+        github_raw_url = "https://raw.githubusercontent.com/username/hr-query-classifier-and-bot/main/process_flow_mermaid_chart.png"
+        
+        try:
+            st.image(github_raw_url, 
+                    caption="HR Query Analysis System - Process Flow Diagram",
+                    use_column_width=True)
+        except:
+            st.error("Unable to load process flow diagram. Please ensure the image is available in the GitHub repository.")
+            st.info("Expected file location: process_flow_mermaid_chart.png in the main repository branch")
+        
+        st.markdown("""
+        **Key Process Components:**
+        - **Blue sections**: Batch classification workflow
+        - **Purple sections**: RAG chatbot implementation  
+        - **Green sections**: Data integration points
+        - **Orange sections**: Decision logic and validation steps
+        
+        The diagram demonstrates how processed query data flows seamlessly between classification and chatbot components, enabling both automated processing and interactive knowledge retrieval.
+        """)
 # Main app logic
 def main():
     """Main application logic with error handling"""

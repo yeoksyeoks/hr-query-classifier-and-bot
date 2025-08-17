@@ -1,17 +1,13 @@
-# hr_classifier.py
-
 import pandas as pd
 import time
 import os
+import streamlit as st
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from openai import OpenAI
 import tiktoken
 
 load_dotenv()
-
-# Remove the global client initialization
-# client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))  # This was causing the error
 
 def get_openai_client():
     """Get OpenAI client with current API key"""
@@ -21,7 +17,7 @@ def get_openai_client():
     return OpenAI(api_key=api_key)
 
 def get_completion_by_messages(messages, model="gpt-4o-mini", temperature=0, top_p=1.0, max_tokens=1024, n=1):
-    client = get_openai_client()  # Get client when function is called
+    client = get_openai_client()
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -112,56 +108,66 @@ def classify_system_process_policy(user_query, spp_definitions):
     spp_response = get_completion_by_messages(messages)
     return spp_response.strip()
 
-def process_hr_queries(csv_file_path: str, query_column_name: str, 
-                      topic_categories: List[str], 
-                      spp_definitions: str) -> pd.DataFrame:
-    """Main function that processes all HR queries from CSV file"""
-    print("Loading CSV file...")
-    df = pd.read_csv(csv_file_path)
+def process_queries_with_live_updates(df, query_column, total_queries, progress_container, status_container, topic_categories, spp_definitions):
+    """
+    Processes queries from a DataFrame with live progress updates using Streamlit.
+    """
+    total_queries = len(df)
+    processed_count = 0
+    results = []
+    start_time = time.time()
     
-    if query_column_name not in df.columns:
-        raise ValueError(f"Column '{query_column_name}' not found in CSV. Available columns: {list(df.columns)}")
-    
-    print(f"Found {len(df)} queries to process")
-    
-    df['summary'] = ''
-    df['topic_classification'] = ''
-    df['spp_classification'] = ''
-    df['processing_status'] = ''
-    
+    with progress_container:
+        progress_bar = st.progress(0, text="Processing queries...")
+    with status_container:
+        status_text = st.markdown("Starting processing...")
+
     for index, row in df.iterrows():
-        query = row[query_column_name]
-        
-        if pd.isna(query) or str(query).strip() == '':
-            df.at[index, 'processing_status'] = 'SKIPPED - Empty query'
-            continue
-        
         try:
-            print(f"Processing query {index + 1}/{len(df)}")
+            query = row[query_column]
             
-            print("  - Generating summary...")
-            summary = summarise_hr_query(query)
-            df.at[index, 'summary'] = summary
-            time.sleep(0.2)
+            if pd.isna(query) or str(query).strip() == '':
+                status = 'SKIPPED - Empty query'
+                topic = None
+                spp_class = None
+                summary = None
+            else:
+                topic = classify_hr_topic(query, topic_categories)
+                spp_class = classify_system_process_policy(query, spp_definitions)
+                summary = summarise_hr_query(query)
+                status = "SUCCESS"
             
-            print("  - Categorising topic...")
-            topic = classify_hr_topic(query, topic_categories)
-            df.at[index, 'topic_classification'] = topic
-            time.sleep(0.2)
-            
-            print("  - Categorising System/Process/Policy...")
-            spp_class = classify_system_process_policy(query, spp_definitions)
-            df.at[index, 'spp_classification'] = spp_class
-            
-            df.at[index, 'processing_status'] = 'SUCCESS'
-            time.sleep(0.3)
+            results.append({
+                'Original Query': query,
+                'Topic': topic,
+                'SPP Class': spp_class,
+                'Summary': summary,
+                'processing_status': status
+            })
             
         except Exception as e:
-            print(f"Error processing query {index + 1}: {str(e)}")
-            df.at[index, 'processing_status'] = f'ERROR: {str(e)}'
-            continue
+            results.append({
+                'Original Query': row[query_column],
+                'Topic': "Error",
+                'SPP Class': "Error",
+                'Summary': f"Error during processing: {str(e)}",
+                'processing_status': "ERROR"
+            })
+            
+        processed_count += 1
+        
+        progress_percent = processed_count / total_queries
+        progress_bar.progress(progress_percent, text=f"Processing query {processed_count} of {total_queries}...")
+        
+        status_text.markdown(f"**Last Query:** {row[query_column][:50]}...")
+        
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     
-    return df
+    progress_bar.progress(1.0, text="Processing Complete!")
+    status_text.markdown(f"**Processing complete!** Processed {total_queries} queries in {elapsed_time:.2f} seconds.")
+    
+    return pd.DataFrame(results)
 
 def get_processing_summary(df: pd.DataFrame) -> Dict[str, Any]:
     """Creates summary report of processing results"""
@@ -170,8 +176,8 @@ def get_processing_summary(df: pd.DataFrame) -> Dict[str, Any]:
     errors = len(df[df['processing_status'].str.contains('ERROR', na=False)])
     skipped = len(df[df['processing_status'].str.contains('SKIPPED', na=False)])
     
-    topic_counts = df['topic_classification'].value_counts().to_dict()
-    spp_counts = df['spp_classification'].value_counts().to_dict()
+    topic_counts = df['Topic'].value_counts().to_dict()
+    spp_counts = df['SPP Class'].value_counts().to_dict()
     
     return {
         'total_queries': total_queries,

@@ -563,6 +563,11 @@ def show_batch_classifier():
     st.title("Batch HR Query Classifier")
     st.markdown("Upload and process multiple HR queries for automated categorisation and summarisation.")
 
+    # Check if classifier is available
+    if not CLASSIFIER_AVAILABLE:
+        st.error("**Classifier Module Unavailable**: Please check the system diagnostics in the sidebar.")
+        return
+
     # Check API key first
     if not os.getenv('OPENAI_API_KEY'):
         st.error("**API Key Required**: Please configure your OpenAI API key in the sidebar before processing queries.")
@@ -610,7 +615,7 @@ def show_batch_classifier():
 
             st.markdown("### Process Queries")
 
-            # Initialise processing state
+            # Initialize processing state
             if 'processing_state' not in st.session_state:
                 st.session_state['processing_state'] = 'ready'
 
@@ -623,73 +628,157 @@ def show_batch_classifier():
 
             # Logic to render correct button and handle state transitions
             if st.session_state['processing_state'] == 'ready':
-                if button_placeholder.button("Start Processing", type="secondary", use_container_width=True):
+                if button_placeholder.button("Start Processing", type="primary", use_container_width=True):
                     if not os.getenv('OPENAI_API_KEY'):
                         st.error("OpenAI API key not found. Please configure your API key in the sidebar.")
-                        return # Exit the function if API key is missing
+                        return
                     
                     st.session_state['processing_state'] = 'processing'
                     st.session_state['total_queries_to_process'] = max_queries
-                    st.rerun() # Rerun to show "Processing..." state
+                    st.rerun()
 
             elif st.session_state['processing_state'] == 'processing':
-                button_placeholder.info("Processing in progress... Please wait.")
+                button_placeholder.info("🔄 Processing in progress... Please wait.")
 
                 # This block runs after 'Start Processing' button is clicked
                 if 'processing_completed' not in st.session_state:
                     try:
-                        result_df = process_queries_with_live_updates(
-                            df.head(st.session_state['total_queries_to_process']),
-                            query_column,
-                            st.session_state['total_queries_to_process'],
-                            progress_container,
-                            status_container
+                        # Import the necessary functions
+                        from hr_classifier_py import process_hr_queries, get_processing_summary
+                        
+                        # Get the subset of data to process
+                        df_to_process = df.head(st.session_state['total_queries_to_process'])
+                        
+                        # Topic categories (same as in your original code)
+                        topic_categories = [
+                            'Annual Variable Component and CONNECT Plan', 'Recruitment', 'Posting',
+                            'Other HR Matters', 'Medical Leave', 'Performance Appraisal',
+                            'Professional Development', 'Casual Employment Scheme',
+                            'Pro-Family Full Pay Leave', 'Medical and Dental Benefits',
+                            'Leaving Service', 'No-Pay Leave', 'Awards',
+                            'Letter of Employment, Testimonial',
+                            'IT Matters (HRP, HR Online, AM Assist)',
+                            'Updating of Personal Particulars and Educational Qualifications',
+                            'Pre-NIE/NIE Admission Matters', 'PS and CS Cards', 'Discipline',
+                            'Urgent Private Affairs Leave/Vacation Leave/Sabbatical Leave',
+                            'Insurance', 'Scholarships and Talent Management', 'Salary Matters',
+                            'Confirmation after probation', 'Bond and Liquidated Damages',
+                            'Injuries During Course of Work', 'Performance Reward',
+                            'Annual Declaration', 'Flexi Work Arrangement', 'Other Leave', 'HRP GRC',
+                            'Compensation Policy', 'HRP Payroll', 'HRP Employee Service',
+                            'Working Hours / Workload', 'Election Manpower Matters', 'Starting Salary',
+                            "Employees requested/CSC provided HR's contact", 'Claims - LDS, Others',
+                            'MKE Commitment Payment', 'HRP Others',
+                            'Participation in External Activities',
+                            'HRG – Organisational Development & Psychology',
+                            'Transfer of service/scheme', 'Contractual Matters and Contract Renewal',
+                            'HRP Deploy', 'Training-Related (PSIP, Induction Courses)',
+                            'Change of Subject Proficiency', 'Contributions to Charity',
+                            'Salary Review',
+                            'Key Personnel/Senior, Lead, Master And Principal Master Teacher Matters',
+                            'Career Development', 'HRP Perform', 'SIUE', 'Emplacement Matters',
+                            'HRP Attract', 'Emplacement Salary', 'Other Benefits', 'CPF and Income Tax',
+                            'Annual Exercise', 'HRG – Carpark Charges Masterlist',
+                            'HRP Data Management', 'Returning to Service', 'Deceased',
+                            'Students - Teacher Ratio Matters', 'Benefits Policy',
+                            'IT Matters (iCON, CES Email, TRAISI)',
+                            'MK Matters: Internship and Work Attachment',
+                            'Performance Appraisal (MKEs)', 'Review of Scheme of Service',
+                            'Outstanding Contribution Award', 'Posting Policy', 'HRP Develop',
+                            'Career Management', 'Senior Key Personnel (KP) Rotation'
+                        ]
+                        
+                        spp_definitions = """
+                        Policy: Related to criteria, policy clarifications
+                        Process: Related to procedures, requests, timeline, submission of documents
+                        System: Related to technical issues
+                        """
+                        
+                        # Save to temporary file for processing
+                        temp_file = "temp_processing_data.csv"
+                        df_to_process.to_csv(temp_file, index=False)
+                        
+                        # Process the queries
+                        with progress_container.container():
+                            st.progress(0.5, text="Processing queries...")
+                        
+                        with status_container.container():
+                            st.info("Processing queries with AI models...")
+                        
+                        result_df = process_hr_queries(
+                            temp_file, 
+                            query_column, 
+                            topic_categories, 
+                            spp_definitions
                         )
+                        
+                        # Clean up temp file
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        
+                        # Store results
                         st.session_state['processed_data'] = result_df
                         st.session_state['processing_state'] = 'complete'
                         
+                        # Generate summary
                         summary = get_processing_summary(result_df)
                         st.session_state['last_processing_stats'] = summary
+                        
+                        # Update activity log
                         if 'activity_log' not in st.session_state:
                             st.session_state['activity_log'] = []
                         st.session_state['activity_log'].append(
                             f"{datetime.now().strftime('%H:%M')} - Processed {len(result_df)} queries"
                         )
+                        
+                        st.session_state['processing_completed'] = True
+                        st.rerun()
+                        
                     except Exception as e:
                         st.session_state['processing_state'] = 'error'
-                        st.error(f"Processing error: {str(e)}")
-                    finally:
+                        st.session_state['processing_error'] = str(e)
                         st.session_state['processing_completed'] = True
-                        st.rerun() # Rerun to show final results
+                        st.rerun()
 
             elif st.session_state['processing_state'] == 'complete':
-                button_placeholder.success("Processing Complete! View results below.")
+                button_placeholder.success("✅ Processing Complete! View results below.")
                 
                 col_go, col_reset = st.columns(2)
                 with col_go:
-                    if st.button("Go to RAG Chatbot", type="primary", use_container_width=True):
+                    if st.button("🤖 Go to RAG Chatbot", type="primary", use_container_width=True):
                         st.session_state['current_page'] = "RAG Chatbot"
                         st.rerun()
                 with col_reset:
-                    if st.button("Process Another Batch", use_container_width=True):
-                        del st.session_state['processed_data']
-                        del st.session_state['processing_completed']
+                    if st.button("🔄 Process Another Batch", use_container_width=True):
+                        # Clear processing state
+                        keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
+                        for key in keys_to_clear:
+                            if key in st.session_state:
+                                del st.session_state[key]
                         st.session_state['processing_state'] = 'ready'
                         st.rerun()
             
             elif st.session_state['processing_state'] == 'error':
-                button_placeholder.error("Processing Error! Retry below.")
-                if st.button("Retry Processing", use_container_width=True):
-                    del st.session_state['processed_data']
-                    if 'processing_completed' in st.session_state:
-                        del st.session_state['processing_completed']
+                error_msg = st.session_state.get('processing_error', 'Unknown error occurred')
+                button_placeholder.error(f"❌ Processing Error: {error_msg}")
+                
+                if st.button("🔄 Retry Processing", use_container_width=True):
+                    # Clear error state
+                    keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
                     st.session_state['processing_state'] = 'ready'
                     st.rerun()
 
             # Show results if processing is complete
-            if 'processed_data' in st.session_state and st.session_state['processing_state'] in ['complete', 'error']:
-                st.markdown("### Processing Results")
+            if ('processed_data' in st.session_state and 
+                st.session_state['processing_state'] == 'complete'):
+                
+                st.markdown("### 📊 Processing Results")
                 result_df = st.session_state['processed_data']
+                
+                # Show summary metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Total Processed", len(result_df))
@@ -700,18 +789,22 @@ def show_batch_classifier():
                     success_rate = (success_count / len(result_df)) * 100 if len(result_df) > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
 
+                # Show the processed data
                 st.dataframe(result_df, use_container_width=True)
 
+                # Download button
                 csv = result_df.to_csv(index=False)
                 st.download_button(
-                    label="Download Results CSV",
+                    label="📥 Download Results CSV",
                     data=csv,
                     file_name=f"hr_query_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
+                
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
+            st.info("Please check that your CSV file is properly formatted.")
 
 def show_rag_chatbot():
     st.title("RAG-Powered HR Chatbot")

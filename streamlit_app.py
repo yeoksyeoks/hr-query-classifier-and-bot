@@ -1077,44 +1077,191 @@ def show_rag_chatbot():
                 
 def show_about_us():
     st.title("About Us")
-    st.markdown("""
-    ### HR Query Analysis System
     
-    This system was developed to help HR departments efficiently process and analyze employee queries using AI technology.
+    st.markdown("## HR Query Analysis System")
     
-    **Key Features:**
-    - Automated query classification
-    - Intelligent summarization
-    - RAG-powered chatbot responses
-    - Batch processing capabilities
+    st.markdown("### Project Overview")
+    st.write("""
+    This application automates HR query processing using artificial intelligence. It classifies employee queries by topic and type, then creates an interactive knowledge base for answering similar questions.
+    """)
     
-    **Technology Stack:**
-    - Streamlit for the web interface
-    - OpenAI GPT models for processing
-    - ChromaDB for vector storage
-    - LangChain for RAG implementation
+    st.markdown("### Purpose")
+    st.write("""
+    HR departments receive numerous employee queries daily. Manual classification and response generation is time-consuming and inconsistent. This system addresses these challenges by automating query categorisation and providing instant access to relevant historical responses.
+    """)
+    
+    st.markdown("### Key Features")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Batch Query Classifier**")
+        st.write("""
+        - Processes CSV files containing HR queries
+        - Classifies queries into 66 HR topic categories
+        - Identifies queries as System, Process, or Policy related
+        - Generates concise summaries for each query
+        - Exports results in structured format
+        """)
+    
+    with col2:
+        st.markdown("**RAG Chatbot**")
+        st.write("""
+        - Creates searchable knowledge base from processed queries
+        - Provides topic-specific conversations
+        - Generates responses based on historical query data
+        - Shows source references for transparency
+        - Maintains conversation history
+        """)
+    
+    st.markdown("### Technical Components")
+    st.write("""
+    The system uses OpenAI's language models for text processing and classification. ChromaDB stores processed queries as searchable vectors. Streamlit provides the web interface.
+    
+    Data flows from CSV upload through classification to knowledge base creation, enabling both batch processing and interactive querying.
+    """)
+    
+    st.markdown("### Data Requirements")
+    st.info("""
+    **Input:** CSV files with HR queries in text format  
+    **Output:** Classified queries with summaries and searchable chatbot interface
+    
+    The system works with any CSV structure - users select which column contains their query text.
+    """)
+    
+    st.markdown("### Use Cases")
+    st.write("""
+    - Process query backlogs efficiently
+    - Standardise response approaches across HR staff
+    - Create training materials from historical data
+    - Identify common query patterns and trends
+    - Provide quick reference for HR personnel
+    """)
+    
+    st.markdown("### Limitations")
+    st.warning("""
+    This is a prototype system requiring human oversight. Classification accuracy depends on query clarity. The chatbot responses reflect only the input data quality and should not replace professional HR judgement for complex or sensitive matters.
     """)
 
 def show_methodology():
     st.title("Methodology")
-    st.markdown("""
-    ### How the System Works
     
-    #### Batch Classification Process:
-    1. **Data Input**: Upload CSV files containing HR queries
-    2. **Preprocessing**: Clean and validate query data
-    3. **Summarization**: Generate concise summaries using LLM
-    4. **Topic Classification**: Categorize queries into predefined HR topics
-    5. **SPP Classification**: Classify as System, Process, or Policy queries
-    6. **Results Export**: Download processed results as CSV
+    st.markdown("## System Architecture")
+    st.write("""
+    The application consists of two connected components: batch classification and interactive chatbot. Data flows from CSV input through AI processing to searchable knowledge base creation.
+    """)
     
-    #### RAG Chatbot Process:
-    1. **Knowledge Base Creation**: Process classified queries into vector embeddings
-    2. **Topic Filtering**: Create topic-specific knowledge bases
-    3. **Query Processing**: Convert user questions to embeddings
-    4. **Similarity Search**: Find relevant context from knowledge base
-    5. **Response Generation**: Generate contextual responses using LLM
-    6. **Source Citation**: Provide references to original queries
+    # Create a simple flow diagram using columns
+    st.markdown("### Data Flow Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.info("CSV Upload")
+    with col2:
+        st.info("AI Classification")
+    with col3:
+        st.info("Vector Storage")
+    with col4:
+        st.info("Interactive Chat")
+    
+    st.markdown("---")
+    
+    st.markdown("## Batch Classification Process")
+    
+    with st.expander("Data Input"):
+        st.write("""
+        The system accepts CSV files containing HR queries. File validation ensures proper format whilst column selection allows flexibility in query text location. Quality checks remove empty entries before processing begins.
+        """)
+    
+    with st.expander("Classification Pipeline"):
+        st.write("""
+        Each query undergoes three processing steps:
+        
+        **Summarisation**: AI generates 2-3 sentence summaries capturing key points
+        
+        **Topic Classification**: Queries are categorised into 66 predefined HR topics
+        
+        **Type Classification**: Queries are identified as System, Process, or Policy related
+        """)
+    
+    with st.expander("Processing Method"):
+        st.write("""
+        The system employs OpenAI's GPT models with structured prompts for consistent output. Individual query processing includes error handling to prevent batch failures.
+        """)
+    
+    with st.expander("Output Generation"):
+        st.write("""
+        Results compile into structured format showing original queries, summaries, and classifications. Processing status tracks successful completions and errors.
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("## RAG Chatbot Implementation")
+    
+    with st.expander("Knowledge Base Creation"):
+        st.write("""
+        Processed query summaries convert to numerical vectors using OpenAI embeddings. ChromaDB stores these vectors in topic-specific collections for efficient searching.
+        """)
+    
+    with st.expander("Conversation Flow"):
+        st.write("""
+        Topic selection enables focused discussions. When questions are submitted, the system searches relevant historical queries and uses this context to generate responses.
+        """)
+    
+    with st.expander("Response Generation"):
+        st.write("""
+        The chatbot combines retrieved information with user questions to create contextual answers. Source attribution shows which original queries informed each response.
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("## Technical Implementation")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Data Integration")
+        st.write("""
+        Session state maintains data flow between classification and chatbot components. Topic categories remain consistent across both systems ensuring seamless integration.
+        """)
+        
+        st.markdown("### Processing Efficiency")
+        st.write("""
+        Batch processing optimises API usage whilst providing real-time progress updates. Caching reduces redundant operations where possible.
+        """)
+    
+    with col2:
+        st.markdown("### Quality Control")
+        st.write("""
+        Processing metrics track success rates and error patterns. Manual review capabilities allow verification of classifications before knowledge base creation.
+        """)
+        
+        st.markdown("### Data Security")
+        st.write("""
+        Password authentication controls access to sensitive HR data. Temporary files clean up automatically after processing completion.
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("## Validation and Limitations")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Accuracy Assessment")
+        st.write("""
+        Classification quality depends on query clarity and recognisable patterns. The system includes processing status indicators for manual review of uncertain results.
+        """)
+    
+    with col2:
+        st.markdown("### Performance Monitoring")
+        st.write("""
+        Success rate tracking and error categorisation help identify optimal processing parameters for different dataset types.
+        """)
+    
+    st.warning("""
+    **System Limitations**: Classification accuracy varies with input quality. Poorly written or ambiguous queries may produce incorrect categorisations. Chatbot responses reflect historical data patterns and may not address novel situations appropriately.
+    
+    Regular output validation is recommended, particularly for complex policy interpretations requiring human expertise.
     """)
 
 # Main app logic

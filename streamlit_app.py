@@ -52,6 +52,7 @@ if 'modules_loaded' not in st.session_state:
 
 # Global flags for module availability
 @st.cache_data
+
 def get_module_status():
     """Check module availability - cached to avoid repeated checks"""
     classifier_available = False
@@ -295,7 +296,7 @@ def show_home():
 
     # Show system status prominently if there are issues
     if not CLASSIFIER_AVAILABLE or not RAG_AVAILABLE:
-        st.warning("⚠️ Some system components are not available. Check the sidebar for details.")
+        st.warning("Some system components are not available. Check the sidebar for details.")
     
     col1, col2 = st.columns([2, 1])
 
@@ -340,12 +341,6 @@ def show_home():
                 else:
                     st.error("RAG Bot not available")
 
-        # ADD THE DEBUG TEST HERE
-        st.markdown("---")
-        st.markdown("### 🔧 Debug Tools")
-        if st.button("🔧 Run Classifier Test", use_container_width=True):
-            test_classifier_functions()
-
     with col2:
         st.markdown("### System Status")
 
@@ -376,6 +371,17 @@ def show_home():
                 st.text(f"• {activity}")
         else:
             st.info("No recent activity")
+
+    # Required disclaimer at the bottom
+    st.markdown("---")
+    with st.expander("Important Notice - Please Read"):
+        st.markdown("""
+        **IMPORTANT NOTICE:** This web application is developed as a proof-of-concept prototype. The information provided here is **NOT intended for actual usage** and should not be relied upon for making any decisions, especially those related to financial, legal, or healthcare matters.
+        
+        **Furthermore, please be aware that the LLM may generate inaccurate or incorrect information. You assume full responsibility for how you use any generated output.**
+        
+        Always consult with qualified professionals for accurate and personalized advice.
+        """)
 
 def process_queries_with_live_updates(df_process, query_column, total_queries, progress_container, status_container):
     """Process queries with real-time progress updates"""

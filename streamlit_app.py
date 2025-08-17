@@ -88,6 +88,7 @@ def check_password():
                 del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
+            st.session_state["password_attempted"] = True
 
     # Check if already authenticated
     if st.session_state.get("password_correct", False):
@@ -99,17 +100,15 @@ def check_password():
         type="password", 
         on_change=password_entered, 
         key="password",
-        placeholder="Enter demo password"
+        placeholder="Enter access password"
     )
-    st.info("Demo Password: `hrqueryclassifierandbot_studentid=2794647y`")
     
-    if st.session_state.get("password_correct", False):
-        return True
-    elif "password" in st.session_state:
-        st.error("❌ Password incorrect")
+    # Only show error after an attempt has been made and it was incorrect
+    if st.session_state.get("password_attempted", False) and not st.session_state.get("password_correct", False):
+        st.error("Password incorrect")
     
     return False
-
+    
 def show_system_diagnostics():
     """Show system diagnostics in sidebar"""
     st.markdown("### 🔧 System Status")

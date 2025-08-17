@@ -563,15 +563,17 @@ def show_batch_classifier():
     st.title("Batch HR Query Classifier")
     st.markdown("Upload and process multiple HR queries for automated categorisation and summarisation.")
 
-    # Check if classifier is available
-    if not CLASSIFIER_AVAILABLE:
-        st.error("**Classifier Module Unavailable**: Please check the system diagnostics in the sidebar.")
-        return
-
     # Check API key first
     if not os.getenv('OPENAI_API_KEY'):
         st.error("**API Key Required**: Please configure your OpenAI API key in the sidebar before processing queries.")
         st.info("**Tip**: Look for the 'Configure API Key' section in the left sidebar.")
+        return
+
+    # Import functions locally for this function
+    try:
+        from hr_classifier_py import process_hr_queries, get_processing_summary
+    except ImportError as e:
+        st.error(f"Error importing classifier functions: {e}")
         return
 
     # File upload section
@@ -615,35 +617,34 @@ def show_batch_classifier():
 
             st.markdown("### Process Queries")
 
-            # Initialize processing state
+            # Initialise processing state
             if 'processing_state' not in st.session_state:
                 st.session_state['processing_state'] = 'ready'
 
             # Create placeholders for live updates
             progress_container = st.empty()
             status_container = st.empty()
+            
+            # Create placeholder for main action button
             button_placeholder = st.empty()
 
             # Logic to render correct button and handle state transitions
             if st.session_state['processing_state'] == 'ready':
-                if button_placeholder.button("Start Processing", type="primary", use_container_width=True):
+                if button_placeholder.button("Start Processing", type="secondary", use_container_width=True):
                     if not os.getenv('OPENAI_API_KEY'):
                         st.error("OpenAI API key not found. Please configure your API key in the sidebar.")
-                        return
+                        return # Exit the function if API key is missing
                     
                     st.session_state['processing_state'] = 'processing'
                     st.session_state['total_queries_to_process'] = max_queries
-                    st.rerun()
+                    st.rerun() # Rerun to show "Processing..." state
 
             elif st.session_state['processing_state'] == 'processing':
-                button_placeholder.info("🔄 Processing in progress... Please wait.")
+                button_placeholder.info("Processing in progress... Please wait.")
 
                 # This block runs after 'Start Processing' button is clicked
                 if 'processing_completed' not in st.session_state:
                     try:
-                        # Import the necessary functions
-                        from hr_classifier_py import process_hr_queries, get_processing_summary
-                        
                         # Get the subset of data to process
                         df_to_process = df.head(st.session_state['total_queries_to_process'])
                         
@@ -692,24 +693,18 @@ def show_batch_classifier():
                         System: Related to technical issues
                         """
                         
-                        # Show progress and current status
-                        with progress_container.container():
-                            st.progress(0.1, text="Starting processing...")
-                        
-                        with status_container.container():
-                            st.info(f"Processing {len(df_to_process)} queries...")
-                            # Add a simple timeout warning
-                            st.warning("⏱️ This may take several minutes for large batches. Please be patient and don't refresh the page.")
-                        
-                        # Save to temporary file for processing (keep original approach)
+                        # Save to temporary file for processing
                         temp_file = "temp_processing_data.csv"
                         df_to_process.to_csv(temp_file, index=False)
                         
-                        # Update progress
+                        # Show progress
                         with progress_container.container():
-                            st.progress(0.3, text="Calling AI processing functions...")
+                            st.progress(0.5, text="Processing queries...")
                         
-                        # Process the queries (original call - don't change this)
+                        with status_container.container():
+                            st.info("Processing queries with AI models...")
+                        
+                        # Process the queries (BACK TO ORIGINAL FUNCTION CALL)
                         result_df = process_hr_queries(
                             temp_file, 
                             query_column, 
@@ -717,64 +712,38 @@ def show_batch_classifier():
                             spp_definitions
                         )
                         
-                        # Update progress
-                        with progress_container.container():
-                            st.progress(0.8, text="Processing complete, preparing results...")
-                        
                         # Clean up temp file
                         if os.path.exists(temp_file):
                             os.remove(temp_file)
                         
-                        # Store results
                         st.session_state['processed_data'] = result_df
                         st.session_state['processing_state'] = 'complete'
                         
                         # Generate summary
-                        try:
-                            summary = get_processing_summary(result_df)
-                            st.session_state['last_processing_stats'] = summary
-                        except Exception as summary_error:
-                            st.warning(f"Could not generate summary: {str(summary_error)}")
-                        
-                        # Update activity log
+                        summary = get_processing_summary(result_df)
+                        st.session_state['last_processing_stats'] = summary
                         if 'activity_log' not in st.session_state:
                             st.session_state['activity_log'] = []
                         st.session_state['activity_log'].append(
                             f"{datetime.now().strftime('%H:%M')} - Processed {len(result_df)} queries"
                         )
-                        
-                        with progress_container.container():
-                            st.progress(1.0, text="All done!")
-                        
-                        st.session_state['processing_completed'] = True
-                        st.rerun()
-                        
                     except Exception as e:
-                        # Simple error handling - just capture the error message
                         st.session_state['processing_state'] = 'error'
-                        st.session_state['processing_error'] = f"{type(e).__name__}: {str(e)}"
+                        st.session_state['processing_error'] = str(e)
+                    finally:
                         st.session_state['processing_completed'] = True
-                        
-                        # Clean up temp file even on error
-                        try:
-                            temp_file = "temp_processing_data.csv"
-                            if os.path.exists(temp_file):
-                                os.remove(temp_file)
-                        except:
-                            pass
-                        
-                        st.rerun()
+                        st.rerun() # Rerun to show final results
 
             elif st.session_state['processing_state'] == 'complete':
-                button_placeholder.success("✅ Processing Complete! View results below.")
+                button_placeholder.success("Processing Complete! View results below.")
                 
                 col_go, col_reset = st.columns(2)
                 with col_go:
-                    if st.button("🤖 Go to RAG Chatbot", type="primary", use_container_width=True):
+                    if st.button("Go to RAG Chatbot", type="primary", use_container_width=True):
                         st.session_state['current_page'] = "RAG Chatbot"
                         st.rerun()
                 with col_reset:
-                    if st.button("🔄 Process Another Batch", use_container_width=True):
+                    if st.button("Process Another Batch", use_container_width=True):
                         # Clear processing state
                         keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
                         for key in keys_to_clear:
@@ -785,22 +754,8 @@ def show_batch_classifier():
             
             elif st.session_state['processing_state'] == 'error':
                 error_msg = st.session_state.get('processing_error', 'Unknown error occurred')
-                button_placeholder.error(f"❌ Processing Error: {error_msg}")
-                
-                # Show the actual error message
-                with st.expander("Error Details"):
-                    st.code(error_msg)
-                    st.write("**Possible causes:**")
-                    st.write("- API rate limits or timeouts")
-                    st.write("- Invalid API key")
-                    st.write("- Network connectivity issues")
-                    st.write("- Large batch size causing timeouts")
-                    st.write("**Suggestions:**")
-                    st.write("- Try processing fewer queries at once")
-                    st.write("- Check your API key is valid")
-                    st.write("- Wait a few minutes and retry")
-                
-                if st.button("🔄 Retry Processing", use_container_width=True):
+                button_placeholder.error(f"Processing Error! {error_msg}")
+                if st.button("Retry Processing", use_container_width=True):
                     # Clear error state
                     keys_to_clear = ['processed_data', 'processing_completed', 'processing_error']
                     for key in keys_to_clear:
@@ -810,39 +765,31 @@ def show_batch_classifier():
                     st.rerun()
 
             # Show results if processing is complete
-            if ('processed_data' in st.session_state and 
-                st.session_state['processing_state'] == 'complete'):
-                
-                st.markdown("### 📊 Processing Results")
+            if 'processed_data' in st.session_state and st.session_state['processing_state'] in ['complete', 'error']:
+                st.markdown("### Processing Results")
                 result_df = st.session_state['processed_data']
-                
-                # Show summary metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Total Processed", len(result_df))
                 with col2:
-                    success_count = len(result_df[result_df['processing_status'] == 'SUCCESS']) if 'processing_status' in result_df.columns else len(result_df)
+                    success_count = len(result_df[result_df['processing_status'] == 'SUCCESS'])
                     st.metric("Successful", success_count)
                 with col3:
                     success_rate = (success_count / len(result_df)) * 100 if len(result_df) > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
 
-                # Show the processed data
                 st.dataframe(result_df, use_container_width=True)
 
-                # Download button
                 csv = result_df.to_csv(index=False)
                 st.download_button(
-                    label="📥 Download Results CSV",
+                    label="Download Results CSV",
                     data=csv,
                     file_name=f"hr_query_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
-                
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
-            st.info("Please check that your CSV file is properly formatted.")
                 
 def show_rag_chatbot():
     st.title("RAG-Powered HR Chatbot")

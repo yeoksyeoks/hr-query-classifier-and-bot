@@ -238,6 +238,58 @@ def sidebar_navigation():
 
     return st.session_state['current_page']
 
+def test_classifier_functions():
+    """Test if the classifier functions work with a simple query"""
+    st.write("🔍 Testing Classifier Functions...")
+    
+    # Test API key
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        st.error("❌ No API key found")
+        return False
+    else:
+        st.success(f"✅ API Key found: ...{api_key[-4:]}")
+    
+    # Test imports
+    try:
+        from hr_classifier_py import summarise_hr_query, classify_hr_topic, classify_system_process_policy
+        st.success("✅ All functions imported successfully")
+    except Exception as e:
+        st.error(f"❌ Import error: {str(e)}")
+        return False
+    
+    # Test a simple query
+    test_query = "I need help with my medical leave application"
+    
+    try:
+        st.write("Testing summarization...")
+        summary = summarise_hr_query(test_query)
+        st.success(f"✅ Summary: {summary}")
+    except Exception as e:
+        st.error(f"❌ Summarization failed: {str(e)}")
+        return False
+    
+    try:
+        st.write("Testing topic classification...")
+        topics = ['Medical Leave', 'Other HR Matters']  # Simplified list
+        topic = classify_hr_topic(test_query, topics)
+        st.success(f"✅ Topic: {topic}")
+    except Exception as e:
+        st.error(f"❌ Topic classification failed: {str(e)}")
+        return False
+    
+    try:
+        st.write("Testing SPP classification...")
+        spp_def = "Policy: Related to criteria, policy clarifications\nProcess: Related to procedures, requests\nSystem: Related to technical issues"
+        spp = classify_system_process_policy(test_query, spp_def)
+        st.success(f"✅ SPP: {spp}")
+    except Exception as e:
+        st.error(f"❌ SPP classification failed: {str(e)}")
+        return False
+    
+    st.success("🎉 All tests passed!")
+    return True
+
 def show_home():
     st.title("HR Query Analysis System")
     st.markdown("### Welcome to the Intelligent HR Support Platform")
@@ -288,6 +340,12 @@ def show_home():
                     st.rerun()
                 else:
                     st.error("RAG Bot not available")
+
+        # ADD THE DEBUG TEST HERE
+        st.markdown("---")
+        st.markdown("### 🔧 Debug Tools")
+        if st.button("🔧 Run Classifier Test", use_container_width=True):
+            test_classifier_functions()
 
     with col2:
         st.markdown("### System Status")
